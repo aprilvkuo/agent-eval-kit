@@ -1,0 +1,6 @@
+include README.md
+include pyproject.toml
+include scripts/__init__.py
+recursive-include scripts/agent_eval *.py
+prune tests
+global-exclude __pycache__ *.py[cod] .DS_Store

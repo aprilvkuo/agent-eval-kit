@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-eval-kit"
+version = "0.1.0"
+description = "Mock-environment Agent runner and outcome evaluator"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "openai>=2,<3",
+]
+
+[project.scripts]
+agent-eval = "scripts.agent_eval.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scripts", "scripts.agent_eval*"]
+
