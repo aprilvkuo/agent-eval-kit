@@ -1,9 +1,10 @@
-const state = { datasets: [], selectedDataset: null, runs: [], selectedRun: null, config: {}, poller: null };
+const state = { datasets: [], selectedDataset: null, runs: [], selectedRun: null, config: {}, models: [], poller: null };
 const $ = (selector) => document.querySelector(selector);
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindEvents();
-  await Promise.all([loadConfig(), loadDatasets()]);
+  await loadConfig();
+  await Promise.all([loadModels(), loadDatasets()]);
 });
 
 function bindEvents() {
@@ -35,8 +36,29 @@ async function loadConfig() {
     $("#model-name").textContent = state.config.model || "未配置模型";
     $("#endpoint-name").textContent = state.config.base_url || "Oracle 可直接运行";
     $("#auth-dot").classList.toggle("ready", state.config.auth_configured);
-    $("#model").placeholder = state.config.model || "请输入模型名称";
   } catch (error) { toast(error.message, true); }
+}
+
+async function loadModels() {
+  const select = $("#model");
+  try {
+    const catalog = await api("/api/models");
+    state.models = catalog.models || [];
+    if (!state.models.length) {
+      select.innerHTML = '<option value="">未发现可用模型</option>';
+    } else {
+      select.innerHTML = state.models.map((model) => `
+        <option value="${escapeHtml(model)}" ${model === catalog.current ? "selected" : ""}>${escapeHtml(model)}</option>`).join("");
+    }
+    if (catalog.warning) toast(catalog.warning, true);
+  } catch (error) {
+    state.models = state.config.model ? [state.config.model] : [];
+    select.innerHTML = state.models.length
+      ? `<option value="${escapeHtml(state.models[0])}">${escapeHtml(state.models[0])}</option>`
+      : '<option value="">模型列表读取失败</option>';
+    toast(error.message, true);
+  }
+  syncAgentFields();
 }
 
 async function loadDatasets(preferredId = null) {
@@ -235,17 +257,18 @@ async function showTrial(id) {
   } catch (error) { toast(error.message, true); }
 }
 
-function renderTrialDetail({ trial, evaluation }) {
+function renderTrialDetail({ task, trial, evaluation }) {
   $("#detail-title").textContent = trial.task_id;
   const failures = evaluation.failures?.length ? `<ul class="failure-list">${evaluation.failures.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : '<span class="badge pass">全部校验通过</span>';
-  const toolSteps = trial.transcript.filter((event) => event.type === "tool_result");
-  const timeline = toolSteps.map((event) => {
-    const changes = stateChanges(event.state_before || {}, event.state_after || {});
-    return `<article class="trace-step"><div class="trace-head"><strong>Step ${event.step} · ${escapeHtml(event.name)}</strong><span>Turn ${event.turn}</span></div>
-      <div class="trace-grid"><div class="trace-box"><b>Arguments</b>\n${escapeHtml(JSON.stringify(event.arguments, null, 2))}</div><div class="trace-box"><b>Result</b>\n${escapeHtml(JSON.stringify(event.result, null, 2))}</div></div>
-      <div class="state-change">${changes.length ? changes.map((change) => `<span class="state-chip">${escapeHtml(change)}</span>`).join("") : '<span class="muted">状态无变化</span>'}</div></article>`;
-  }).join("");
+  const timeline = trial.transcript.map(renderTraceEvent).join("");
   const diagnostics = evaluation.diagnostics || {};
+  const visibleInput = task?.input || {};
+  const taskInput = {
+    prompt: visibleInput.prompt || "",
+    files: visibleInput.files || [],
+    initial_state: visibleInput.initial_state || {},
+    available_tools: (visibleInput.tools || []).map((tool) => tool.name),
+  };
   $("#detail-content").innerHTML = `
     <div class="detail-summary">
       <div class="mini-metric"><span>结果</span><strong class="${evaluation.passed ? "" : "fail-text"}">${evaluation.passed ? "通过" : "失败"}</strong></div>
@@ -253,11 +276,38 @@ function renderTrialDetail({ trial, evaluation }) {
       <div class="mini-metric"><span>状态准确率</span><strong>${pct(evaluation.metrics?.state_key_accuracy)}</strong></div>
       <div class="mini-metric"><span>逐项覆盖率</span><strong>${pct(evaluation.metrics?.item_coverage)}</strong></div>
     </div>
-    <section class="detail-section"><h3>评估结论</h3>${failures}</section>
-    <section class="detail-section"><h3>模型最终输出</h3><div class="answer">${escapeHtml(trial.outcome?.final_answer || "（无文字输出）")}</div></section>
-    <section class="detail-section"><h3>工具调用轨迹 · ${toolSteps.length} 步</h3><div class="trace">${timeline || '<p class="muted">没有工具调用</p>'}</div></section>
-    <section class="detail-section"><h3>最终状态</h3><pre class="json-block">${escapeHtml(JSON.stringify(trial.outcome?.final_state || {}, null, 2))}</pre></section>
-    <section class="detail-section"><h3>评估诊断</h3><pre class="json-block">${escapeHtml(JSON.stringify(diagnostics, null, 2))}</pre></section>`;
+    <section class="detail-section"><h3>Task 输入</h3><pre class="json-block">${escapeHtml(JSON.stringify(taskInput, null, 2))}</pre></section>
+    <section class="detail-section"><h3>Harness 调用链 · ${trial.transcript.length} 个事件</h3><div class="trace">${timeline || '<p class="muted">没有调用事件</p>'}</div></section>
+    <section class="detail-section"><h3>Outcome · 模型最终输出</h3><div class="answer">${escapeHtml(trial.outcome?.final_answer || "（无文字输出）")}</div><pre class="json-block">${escapeHtml(JSON.stringify(trial.outcome?.final_state || {}, null, 2))}</pre></section>
+    <section class="detail-section"><h3>Grade · 评估结论</h3>${failures}<pre class="json-block">${escapeHtml(JSON.stringify(diagnostics, null, 2))}</pre></section>
+    <section class="detail-section"><h3>Target State</h3><pre class="json-block">${escapeHtml(JSON.stringify(task?.output?.target_state || {}, null, 2))}</pre></section>`;
+}
+
+function renderTraceEvent(event) {
+  if (event.type === "assistant") {
+    const request = event.model_request;
+    const response = { content: event.content || "", tool_calls: event.tool_calls || [] };
+    const usage = event.usage || {};
+    return `<article class="trace-step assistant"><div class="trace-head"><strong>Turn ${event.turn} · Model</strong><span>${number(event.duration_ms)} ms</span></div>
+      <div class="trace-meta"><span>${escapeHtml(request?.model || "Oracle / scripted")}</span><span>finish: ${escapeHtml(event.finish_reason || "—")}</span><span>tokens: ${usage.total_tokens ?? 0}</span></div>
+      ${request ? traceDetails("完整 Model Request", request) : ""}
+      ${traceDetails("Model Response", response, true)}</article>`;
+  }
+  if (event.type === "tool_result") {
+    const changes = stateChanges(event.state_before || {}, event.state_after || {});
+    return `<article class="trace-step tool_result"><div class="trace-head"><strong>Step ${event.step} · Tool · ${escapeHtml(event.name)}</strong><span>${number(event.duration_ms)} ms</span></div>
+      <div class="trace-grid"><div class="trace-box"><b>Arguments</b>\n${escapeHtml(JSON.stringify(event.arguments, null, 2))}</div><div class="trace-box"><b>Result</b>\n${escapeHtml(JSON.stringify(event.result, null, 2))}</div></div>
+      <div class="state-change">${changes.length ? changes.map((change) => `<span class="state-chip">${escapeHtml(change)}</span>`).join("") : '<span class="muted">状态无变化</span>'}</div>
+      ${traceDetails("完整 State Before / After", { state_before: event.state_before, state_after: event.state_after })}</article>`;
+  }
+  if (event.type === "agent_error") {
+    return `<article class="trace-step agent_error"><div class="trace-head"><strong>Turn ${event.turn} · Agent Error</strong><span>${number(event.duration_ms)} ms</span></div><div class="trace-error">${escapeHtml(event.error)}</div></article>`;
+  }
+  return `<article class="trace-step"><pre class="trace-box">${escapeHtml(JSON.stringify(event, null, 2))}</pre></article>`;
+}
+
+function traceDetails(label, payload, open = false) {
+  return `<details class="trace-details" ${open ? "open" : ""}><summary>${escapeHtml(label)}</summary><pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre></details>`;
 }
 
 function closeDetail() {
@@ -268,7 +318,7 @@ function closeDetail() {
 
 function syncAgentFields() {
   const isModel = $("#agent").value === "openai";
-  $("#model").disabled = !isModel;
+  $("#model").disabled = !isModel || !state.models.length;
 }
 
 function resetWorkspace() {

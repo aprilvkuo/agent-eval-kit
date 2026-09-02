@@ -20,11 +20,18 @@ agent-eval web
 浏览器打开 `http://127.0.0.1:8765`。网页支持：
 
 - 导入、查看和删除 JSONL 测试集；
-- 运行 Oracle 基准或 OpenAI-compatible 真实模型；
+- 从当前 LiteLLM `/v1/models` 下拉选择模型，运行 Oracle 基准或 OpenAI-compatible 真实模型；
 - 查看通过率、平均分、`pass@k` 和平均工具调用数；
-- 下钻每个 Trial，查看最终输出、函数参数、Mock 返回值、调用前后状态变化和失败诊断。
+- 下钻每个 Trial，查看 Task 输入、完整 Model Request/Response、每轮 Token 与耗时、函数参数、Mock 返回值、调用前后状态、Outcome 和 Grade。
 
 测试集、运行和 Trial 保存在本地 `workspace/dashboard.db`。API Token 只从本地环境变量读取，不会写入网页或数据库；服务默认只监听 `127.0.0.1`。
+
+如果模型服务使用 Tailscale 地址，并且本机配置了 HTTP 代理，需要把服务主机加入 `NO_PROXY`，避免请求被代理为 `502`：
+
+```bash
+export NO_PROXY="127.0.0.1,localhost,<your-host>.ts.net"
+export no_proxy="$NO_PROXY"
+```
 
 ## 命令行版
 

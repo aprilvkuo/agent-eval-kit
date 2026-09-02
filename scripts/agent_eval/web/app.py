@@ -45,6 +45,34 @@ def create_app(data_dir: Path) -> FastAPI:
             ),
         }
 
+    @app.get("/api/models")
+    def list_models():
+        current = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL")
+        base_url = os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+        api_key = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("OPENAI_API_KEY")
+        fallback = [current] if current else []
+        if not base_url or not api_key:
+            return {"models": fallback, "current": current, "source": "configured"}
+        try:
+            from openai import OpenAI
+
+            response = OpenAI(api_key=api_key, base_url=_api_base_url(base_url)).models.list()
+            discovered = {
+                item.id
+                for item in response.data
+                if isinstance(getattr(item, "id", None), str) and item.id.strip()
+            }
+            current_set = {current} if current else set()
+            ordered = ([current] if current else []) + sorted(discovered - current_set)
+            return {"models": ordered, "current": current, "source": "remote"}
+        except Exception:
+            return {
+                "models": fallback,
+                "current": current,
+                "source": "configured",
+                "warning": "无法读取远端模型列表，已使用当前配置模型",
+            }
+
     @app.get("/api/datasets")
     def list_datasets():
         return store.list_datasets()
@@ -140,3 +168,10 @@ def _parse_jsonl(text: str) -> List[dict]:
 def _require_dataset(store: DashboardStore, dataset_id: str) -> None:
     if store.get_dataset(dataset_id) is None:
         raise HTTPException(status_code=404, detail="测试集不存在")
+
+
+def _api_base_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if "://" in normalized and normalized.split("://", 1)[1].count("/") == 0:
+        return normalized + "/v1"
+    return normalized

@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -60,6 +61,8 @@ class AgentWebApiTests(unittest.TestCase):
         self.assertEqual(2, len(trials))
         self.assertTrue(detail["evaluation"]["passed"])
         self.assertTrue(detail["trial"]["transcript"])
+        self.assertEqual(sample_task()["input"]["prompt"], detail["task"]["input"]["prompt"])
+        self.assertEqual(sample_task()["output"]["target_state"], detail["task"]["output"]["target_state"])
 
     def test_config_reports_auth_presence_without_returning_token(self):
         with patch.dict(
@@ -78,12 +81,52 @@ class AgentWebApiTests(unittest.TestCase):
         self.assertTrue(response.json()["auth_configured"])
         self.assertNotIn("secret-value", response.text)
 
+    def test_lists_available_models_and_places_current_model_first(self):
+        fake_models = SimpleNamespace(
+            data=[
+                SimpleNamespace(id="another-model"),
+                SimpleNamespace(id="current-model"),
+                SimpleNamespace(id="another-model"),
+            ]
+        )
+        with patch.dict(
+            "os.environ",
+            {
+                "ANTHROPIC_AUTH_TOKEN": "secret-value",
+                "ANTHROPIC_MODEL": "current-model",
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
+            },
+            clear=True,
+        ), patch("openai.OpenAI") as openai_client:
+            openai_client.return_value.models.list.return_value = fake_models
+            response = self.client.get("/api/models")
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual("current-model", response.json()["current"])
+        self.assertEqual(["current-model", "another-model"], response.json()["models"])
+        self.assertNotIn("secret-value", response.text)
+
     def test_serves_dashboard(self):
         response = self.client.get("/")
 
         self.assertEqual(200, response.status_code)
         self.assertIn("Agent Eval Console", response.text)
         self.assertIn("测试集", response.text)
+        self.assertIn('<select id="model"', response.text)
+
+    def test_dashboard_renders_complete_harness_timeline(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "agent_eval"
+            / "web"
+            / "static"
+            / "app.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Harness 调用链", source)
+        self.assertIn("model_request", source)
+        self.assertIn('event.type === "assistant"', source)
 
 
 if __name__ == "__main__":

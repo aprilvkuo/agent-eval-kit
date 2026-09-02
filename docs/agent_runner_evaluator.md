@@ -26,7 +26,7 @@ python3 -m pip install -e '.[web]'
 agent-eval web --data-dir workspace --host 127.0.0.1 --port 8765
 ```
 
-打开 `http://127.0.0.1:8765` 后，可以导入和删除测试集、运行 Oracle 或真实模型、查看汇总指标，并下钻每个 Trial 的模型最终回答、工具参数、工具返回值、`state_before/state_after` 差异和评分诊断。
+打开 `http://127.0.0.1:8765` 后，可以导入和删除测试集，从 LiteLLM 当前模型列表中选择模型，运行 Oracle 或真实模型并查看汇总指标。每个 Trial 都可以下钻完整 Harness 调用链：Task 输入、逐轮 Model Request/Response、Token 与耗时、工具参数与返回值、`state_before/state_after`、Outcome 和 Grade。
 
 网页数据保存在 `workspace/dashboard.db`。Token 仍只从 `ANTHROPIC_AUTH_TOKEN` 或 `OPENAI_API_KEY` 读取，不通过 Web API 传输，也不写入 SQLite。服务默认只监听本机。
 

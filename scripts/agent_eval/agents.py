@@ -86,10 +86,18 @@ class OpenAICompatiblePolicy:
             self.client = OpenAI(**kwargs)
 
     def next_turn(self, task: Dict[str, Any], transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
+        messages = self._messages(task, transcript)
+        tools = self._tools(task)
+        request = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "temperature": self.temperature,
+        }
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=self._messages(task, transcript),
-            tools=self._tools(task),
+            messages=messages,
+            tools=tools,
             temperature=self.temperature,
         )
         choice = response.choices[0]
@@ -113,6 +121,7 @@ class OpenAICompatiblePolicy:
             "tool_calls": tool_calls,
             "usage": usage,
             "finish_reason": getattr(choice, "finish_reason", None),
+            "model_request": request,
         }
 
     def _messages(self, task: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

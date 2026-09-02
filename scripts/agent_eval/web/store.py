@@ -276,13 +276,20 @@ class DashboardStore:
     def get_trial(self, trial_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT run_id, trial_json, evaluation_json FROM trials WHERE trial_id = ?",
+                """
+                SELECT trials.run_id, trials.trial_json, trials.evaluation_json, tasks.task_json
+                FROM trials
+                JOIN runs ON runs.id = trials.run_id
+                JOIN tasks ON tasks.dataset_id = runs.dataset_id AND tasks.task_id = trials.task_id
+                WHERE trials.trial_id = ?
+                """,
                 (trial_id,),
             ).fetchone()
         if row is None:
             return None
         return {
             "run_id": row["run_id"],
+            "task": json.loads(row["task_json"]),
             "trial": json.loads(row["trial_json"]),
             "evaluation": json.loads(row["evaluation_json"]),
         }

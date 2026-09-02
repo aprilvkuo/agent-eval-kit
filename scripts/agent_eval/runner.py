@@ -26,24 +26,38 @@ def run_task(task: Dict[str, Any], policy: Any, max_steps: Optional[int] = None)
 
     while True:
         turn_number += 1
+        turn_started = time.perf_counter()
         try:
             turn = policy.next_turn(task, copy.deepcopy(transcript))
         except Exception as exc:
             status = "agent_error"
             error = "{}: {}".format(type(exc).__name__, exc)
+            transcript.append(
+                {
+                    "turn": turn_number,
+                    "type": "agent_error",
+                    "error": error,
+                    "duration_ms": round((time.perf_counter() - turn_started) * 1000, 3),
+                }
+            )
             break
 
         content = turn.get("content") or ""
         tool_calls = copy.deepcopy(turn.get("tool_calls") or [])
+        turn_usage = copy.deepcopy(turn.get("usage") or {})
         transcript.append(
             {
                 "turn": turn_number,
                 "type": "assistant",
                 "content": content,
                 "tool_calls": tool_calls,
+                "finish_reason": turn.get("finish_reason"),
+                "usage": turn_usage,
+                "duration_ms": round((time.perf_counter() - turn_started) * 1000, 3),
+                "model_request": copy.deepcopy(turn.get("model_request")),
             }
         )
-        _add_usage(usage, turn.get("usage") or {})
+        _add_usage(usage, turn_usage)
 
         if not tool_calls:
             final_answer = content
@@ -58,6 +72,7 @@ def run_task(task: Dict[str, Any], policy: Any, max_steps: Optional[int] = None)
                 break
             tool_call_count += 1
             state_before = copy.deepcopy(environment.state)
+            tool_started = time.perf_counter()
             result = environment.call_tool(call.get("name", ""), call.get("arguments", {}))
             transcript.append(
                 {
@@ -70,6 +85,7 @@ def run_task(task: Dict[str, Any], policy: Any, max_steps: Optional[int] = None)
                     "result": copy.deepcopy(result),
                     "state_before": state_before,
                     "state_after": copy.deepcopy(environment.state),
+                    "duration_ms": round((time.perf_counter() - tool_started) * 1000, 3),
                 }
             )
         if budget_exceeded:

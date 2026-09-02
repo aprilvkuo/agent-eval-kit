@@ -72,6 +72,44 @@ class RunnerTests(unittest.TestCase):
 
         self.assertIn("legacy_top_level_target_state", trial["schema_warnings"])
 
+    def test_records_complete_per_turn_harness_trace(self):
+        actions = [
+            {
+                "content": "完成",
+                "tool_calls": [],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 3, "total_tokens": 15},
+                "finish_reason": "stop",
+                "model_request": {
+                    "model": "test-model",
+                    "messages": [{"role": "user", "content": "测试"}],
+                    "tools": [],
+                    "temperature": 0.0,
+                },
+            }
+        ]
+
+        trial = run_task(sample_task(), ScriptedPolicy(actions))
+        assistant_event = trial["transcript"][0]
+
+        self.assertEqual("stop", assistant_event["finish_reason"])
+        self.assertEqual(15, assistant_event["usage"]["total_tokens"])
+        self.assertEqual("test-model", assistant_event["model_request"]["model"])
+        self.assertGreaterEqual(assistant_event["duration_ms"], 0)
+
+    def test_records_agent_error_as_trace_event(self):
+        class FailingPolicy:
+            name = "failing"
+
+            def next_turn(self, task, transcript):
+                del task, transcript
+                raise RuntimeError("upstream unavailable")
+
+        trial = run_task(sample_task(), FailingPolicy())
+
+        self.assertEqual("agent_error", trial["status"])
+        self.assertEqual("agent_error", trial["transcript"][0]["type"])
+        self.assertIn("upstream unavailable", trial["transcript"][0]["error"])
+
 
 class FakeCompletions:
     def __init__(self):
@@ -114,6 +152,9 @@ class OpenAICompatiblePolicyTests(unittest.TestCase):
         self.assertEqual(["student_id", "code", "code_type"], function["parameters"]["required"])
         self.assertEqual("query_case", turn["tool_calls"][0]["name"])
         self.assertEqual(14, turn["usage"]["total_tokens"])
+        self.assertEqual("test-model", turn["model_request"]["model"])
+        self.assertEqual(request["messages"], turn["model_request"]["messages"])
+        self.assertNotIn("target_state", json.dumps(turn["model_request"], ensure_ascii=False))
 
 
 if __name__ == "__main__":
