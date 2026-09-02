@@ -26,6 +26,14 @@ agent-eval web
 
 测试集、运行和 Trial 保存在本地 `workspace/dashboard.db`。API Token 只从本地环境变量读取，不会写入网页或数据库；服务默认只监听 `127.0.0.1`。
 
+需要公开展示时，建议单独启动只读实例，再交给反向代理：
+
+```bash
+AGENT_EVAL_READ_ONLY=1 agent-eval web --port 8766
+```
+
+只读实例可以查看测试集、完整调用链和评估结果，但会拒绝运行评测、导入或删除数据，并隐藏模型服务地址和认证状态。
+
 如果模型服务使用 Tailscale 地址，并且本机配置了 HTTP 代理，需要把服务主机加入 `NO_PROXY`，避免请求被代理为 `502`：
 
 ```bash

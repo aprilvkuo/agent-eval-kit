@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -32,17 +32,29 @@ def create_app(data_dir: Path) -> FastAPI:
     app = FastAPI(title="Agent Eval Kit", version="0.2.0")
     app.state.store = store
     app.state.service = service
+    read_only = _env_flag("AGENT_EVAL_READ_ONLY")
     static_dir = Path(__file__).with_name("static")
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.middleware("http")
+    async def enforce_read_only(request: Request, call_next):
+        mutation = request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        if read_only and mutation and request.url.path.startswith("/api/"):
+            return JSONResponse(status_code=403, content={"detail": "公网只读模式不允许修改或运行评测"})
+        return await call_next(request)
 
     @app.get("/api/config")
     def get_config():
         return {
             "model": os.environ.get("ANTHROPIC_MODEL") or os.environ.get("OPENAI_MODEL"),
-            "base_url": os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("OPENAI_BASE_URL"),
-            "auth_configured": bool(
+            "base_url": None
+            if read_only
+            else os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("OPENAI_BASE_URL"),
+            "auth_configured": not read_only
+            and bool(
                 os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("OPENAI_API_KEY")
             ),
+            "read_only": read_only,
         }
 
     @app.get("/api/models")
@@ -51,7 +63,7 @@ def create_app(data_dir: Path) -> FastAPI:
         base_url = os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
         api_key = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("OPENAI_API_KEY")
         fallback = [current] if current else []
-        if not base_url or not api_key:
+        if read_only or not base_url or not api_key:
             return {"models": fallback, "current": current, "source": "configured"}
         try:
             from openai import OpenAI
@@ -175,3 +187,7 @@ def _api_base_url(base_url: str) -> str:
     if "://" in normalized and normalized.split("://", 1)[1].count("/") == 0:
         return normalized + "/v1"
     return normalized
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}

@@ -36,6 +36,12 @@ async function loadConfig() {
     $("#model-name").textContent = state.config.model || "未配置模型";
     $("#endpoint-name").textContent = state.config.base_url || "Oracle 可直接运行";
     $("#auth-dot").classList.toggle("ready", state.config.auth_configured);
+    if (state.config.read_only) {
+      $("#read-only-banner").hidden = false;
+      $("#open-import").disabled = true;
+      $("#open-import").title = "公网只读模式";
+      $("#run-form").querySelectorAll("input, select, button").forEach((control) => control.disabled = true);
+    }
   } catch (error) { toast(error.message, true); }
 }
 
@@ -95,6 +101,10 @@ async function selectDataset(id) {
   $("#run-button").disabled = false;
   $("#view-tasks").disabled = false;
   $("#delete-dataset").disabled = false;
+  if (state.config.read_only) {
+    $("#run-button").disabled = true;
+    $("#delete-dataset").disabled = true;
+  }
   resetMetrics();
   await loadRuns();
 }
@@ -169,6 +179,7 @@ function renderRuns() {
 
 async function createRun(event) {
   event.preventDefault();
+  if (state.config.read_only) return toast("公网只读模式不能运行评测", true);
   if (!state.selectedDataset) return;
   const agent = $("#agent").value;
   const payload = {
@@ -318,7 +329,7 @@ function closeDetail() {
 
 function syncAgentFields() {
   const isModel = $("#agent").value === "openai";
-  $("#model").disabled = !isModel || !state.models.length;
+  $("#model").disabled = state.config.read_only || !isModel || !state.models.length;
 }
 
 function resetWorkspace() {

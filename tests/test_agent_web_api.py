@@ -128,6 +128,32 @@ class AgentWebApiTests(unittest.TestCase):
         self.assertIn("model_request", source)
         self.assertIn('event.type === "assistant"', source)
 
+    def test_read_only_mode_blocks_mutations_and_reports_access_mode(self):
+        payload = json.dumps(sample_task(), ensure_ascii=False).encode("utf-8") + b"\n"
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            "os.environ", {"AGENT_EVAL_READ_ONLY": "1"}, clear=False
+        ):
+            with TestClient(create_app(Path(temp_dir))) as client:
+                config = client.get("/api/config")
+                response = client.post(
+                    "/api/datasets",
+                    data={"name": "不可写入"},
+                    files={"file": ("blocked.jsonl", payload, "application/x-ndjson")},
+                )
+
+        self.assertTrue(config.json()["read_only"])
+        self.assertEqual(403, response.status_code)
+        self.assertIn("只读", response.json()["detail"])
+
+    def test_dashboard_has_public_read_only_state(self):
+        root = Path(__file__).resolve().parents[1] / "scripts" / "agent_eval" / "web" / "static"
+        html = (root / "index.html").read_text(encoding="utf-8")
+        javascript = (root / "app.js").read_text(encoding="utf-8")
+
+        self.assertIn("read-only-banner", html)
+        self.assertIn("公开只读", html)
+        self.assertIn("state.config.read_only", javascript)
+
 
 if __name__ == "__main__":
     unittest.main()
