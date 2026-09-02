@@ -1,11 +1,32 @@
 # Agent Eval Kit
 
-一个代码库完成两件事：
+一个代码库完成三件事：
 
 1. **Agent Runner**：让模型在任务自带的 Mock 环境中调用工具、查询数据并修改状态。
 2. **Evaluator**：根据 `output.target_state`、逐项覆盖率和工具合法性进行评分。
+3. **Web Dashboard**：管理 JSONL 测试集、运行模型，并查看评分、模型输出和每一步状态变化。
 
-## 快速开始
+## 网页版（推荐）
+
+安装网页依赖并启动：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e '.[web]'
+agent-eval web
+```
+
+浏览器打开 `http://127.0.0.1:8765`。网页支持：
+
+- 导入、查看和删除 JSONL 测试集；
+- 运行 Oracle 基准或 OpenAI-compatible 真实模型；
+- 查看通过率、平均分、`pass@k` 和平均工具调用数；
+- 下钻每个 Trial，查看最终输出、函数参数、Mock 返回值、调用前后状态变化和失败诊断。
+
+测试集、运行和 Trial 保存在本地 `workspace/dashboard.db`。API Token 只从本地环境变量读取，不会写入网页或数据库；服务默认只监听 `127.0.0.1`。
+
+## 命令行版
 
 要求 Python 3.9+。
 
@@ -89,7 +110,8 @@ scripts/agent_eval/
   environment.py  Mock 数据库、工具和状态变化
   runner.py       Trial 执行与 transcript 记录
   evaluator.py    单条评分与汇总
-  cli.py          run / evaluate / benchmark 命令
+  cli.py          run / evaluate / benchmark / web 命令
+  web/            FastAPI、SQLite 与 Dashboard 静态页面
 examples/agent_eval/  示例任务
 tests/                自动化测试
 ```
@@ -101,4 +123,3 @@ tests/                自动化测试
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
-

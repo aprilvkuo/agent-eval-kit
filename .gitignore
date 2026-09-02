@@ -7,3 +7,4 @@ runs/
 build/
 dist/
 *.egg-info/
+workspace/

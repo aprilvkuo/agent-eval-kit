@@ -2,5 +2,6 @@ include README.md
 include pyproject.toml
 include scripts/__init__.py
 recursive-include scripts/agent_eval *.py
+recursive-include scripts/agent_eval/web/static *.html *.css *.js
 prune tests
 global-exclude __pycache__ *.py[cod] .DS_Store

@@ -17,6 +17,21 @@ Runner 不会把 `output` 或 `extra.hidden` 提供给真实模型。真实模�
 - `input.tools`
 - 每次工具调用的返回结果
 
+## 2. Web Dashboard
+
+安装并启动本地网页：
+
+```bash
+python3 -m pip install -e '.[web]'
+agent-eval web --data-dir workspace --host 127.0.0.1 --port 8765
+```
+
+打开 `http://127.0.0.1:8765` 后，可以导入和删除测试集、运行 Oracle 或真实模型、查看汇总指标，并下钻每个 Trial 的模型最终回答、工具参数、工具返回值、`state_before/state_after` 差异和评分诊断。
+
+网页数据保存在 `workspace/dashboard.db`。Token 仍只从 `ANTHROPIC_AUTH_TOKEN` 或 `OPENAI_API_KEY` 读取，不通过 Web API 传输，也不写入 SQLite。服务默认只监听本机。
+
+## 3. 命令行快速开始
+
 安装：
 
 ```bash
@@ -33,7 +48,7 @@ agent-eval benchmark \
   --trials-per-task 3
 ```
 
-## 2. Mock 环境
+## 4. Mock 环境
 
 每次 trial 都创建独立的 `MockEnvironment`：
 
@@ -59,7 +74,7 @@ query_log
 
 其它简单查询工具可以在 `params_state.tool_responses` 中配置静态返回；需要参数相关逻辑时，在 `MockEnvironment` 中增加对应 handler。
 
-## 3. 先跑 Oracle 基线
+## 5. 先跑 Oracle 基线
 
 Oracle 使用任务中的标准轨迹，作用是确认：
 
@@ -86,9 +101,9 @@ python3 -m scripts.agent_eval.cli evaluate \
 
 Oracle 应得到 `pass_rate=1.0`。如果 Oracle 失败，优先检查数据、mock 环境或 grader，不应先归因于模型。
 
-## 4. 跑真实模型
+## 6. 跑真实模型
 
-### 4.1 OpenAI API
+### 6.1 OpenAI API
 
 ```bash
 export OPENAI_API_KEY='<your-api-key>'
@@ -102,7 +117,7 @@ python3 -m scripts.agent_eval.cli run \
   --temperature 0
 ```
 
-### 4.2 vLLM 或 LiteLLM
+### 6.2 vLLM 或 LiteLLM
 
 只要服务提供 OpenAI-compatible `/v1/chat/completions` 即可：
 
@@ -127,7 +142,7 @@ python3 -m scripts.agent_eval.cli run \
 
 也可直接设置 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`，然后省略 `--model`、`--base-url` 和 `--api-key-env`。当地址只有主机和端口时，Runner 会自动补 `/v1`。
 
-## 5. Runner 参数
+## 7. Runner 参数
 
 | 参数 | 必填 | 说明 |
 |---|---:|---|
@@ -142,7 +157,7 @@ python3 -m scripts.agent_eval.cli run \
 | `--trials-per-task` | 否 | 每个任务重复运行次数，默认 `1` |
 | `--limit` | 否 | 只运行前 N 条任务 |
 
-## 6. Trial 输出
+## 8. Trial 输出
 
 每条 trial 包含：
 
@@ -172,7 +187,7 @@ python3 -m scripts.agent_eval.cli run \
 
 `transcript` 会保留每轮模型输出、工具名称、参数、返回结果，以及工具调用前后的状态。
 
-## 7. 评分规则
+## 9. 评分规则
 
 | 指标 | 权重 | 说明 |
 |---|---:|---|
@@ -197,7 +212,7 @@ trial 完成
 且没有非法工具调用
 ```
 
-## 8. 汇总指标
+## 10. 汇总指标
 
 | 指标 | 含义 |
 |---|---|
@@ -209,7 +224,7 @@ trial 完成
 
 汇总同时按 `industry`、`scenario`、`difficulty` 分组。
 
-## 9. 推荐运行顺序
+## 11. 推荐运行顺序
 
 1. 先对全部数据运行 Oracle；
 2. Oracle 失败的数据先修复任务、环境或 grader；

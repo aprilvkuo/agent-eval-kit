@@ -54,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--limit", type=positive_int)
     benchmark_parser.add_argument("--trials-per-task", type=positive_int, default=1)
     benchmark_parser.set_defaults(handler=benchmark_command)
+
+    web_parser = subparsers.add_parser("web", help="启动本地评测管理网页")
+    web_parser.add_argument("--data-dir", default="workspace", help="网页数据目录")
+    web_parser.add_argument("--host", default="127.0.0.1", help="监听地址")
+    web_parser.add_argument("--port", type=int, default=8765, help="监听端口")
+    web_parser.set_defaults(handler=web_command)
     return parser
 
 
@@ -118,6 +124,13 @@ def benchmark_command(args: argparse.Namespace) -> int:
         summary=str(output_dir / "summary.json"),
     )
     return evaluate_command(evaluate_args)
+
+
+def web_command(args: argparse.Namespace) -> int:
+    from scripts.agent_eval.web.server import serve
+
+    serve(Path(args.data_dir), host=args.host, port=args.port)
+    return 0
 
 
 def make_policy(args: argparse.Namespace) -> Any:
