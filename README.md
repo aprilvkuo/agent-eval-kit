@@ -51,6 +51,15 @@ source .venv/bin/activate
 python3 -m pip install -e .
 ```
 
+仓库包含两个示例测试集：
+
+| 文件 | 规模 | 用途 |
+|---|---:|---|
+| `examples/agent_eval/education_graduation_audit.jsonl` | 1 条 | 快速验证 Runner、Mock 环境和 Evaluator |
+| `examples/agent_eval/agent_demo.jsonl` | 20 条 | 教育、金融、医疗、通信四行业综合测试 |
+
+所有记录都使用 `output.target_state`，顶层不存在 `target_state`。
+
 先用 Oracle 验证任务、Mock 环境和评分器：
 
 ```bash
@@ -62,6 +71,17 @@ agent-eval benchmark \
 ```
 
 正常结果应为 `pass_rate=1.0`。
+
+运行 20 条综合测试集：
+
+```bash
+agent-eval benchmark \
+  --tasks examples/agent_eval/agent_demo.jsonl \
+  --output-dir runs/agent-demo/oracle \
+  --agent oracle
+```
+
+这批数据的 2026-09-03 实测结果和已知 Mock/Oracle 问题见 [Agent Demo 基准结果](docs/agent_demo_benchmark_2026-09-03.md)。当前 Oracle 为 11/20，`qwen3.8-27b-fp8` 为 6/20、平均分 0.8655；`deepseek-v4-flash-0731` 的请求全部返回 `401 Unauthorized`，不能解释为模型能力分数。
 
 ## 使用真实模型
 
@@ -88,9 +108,10 @@ set +a
 
 ```bash
 agent-eval benchmark \
-  --tasks examples/agent_eval/education_graduation_audit.jsonl \
-  --output-dir runs/model \
+  --tasks examples/agent_eval/agent_demo.jsonl \
+  --output-dir runs/model/qwen3.8-27b-fp8 \
   --agent openai \
+  --model qwen3.8-27b-fp8 \
   --trials-per-task 3 \
   --temperature 0
 ```

@@ -48,6 +48,8 @@ agent-eval benchmark \
   --trials-per-task 3
 ```
 
+综合测试集位于 `examples/agent_eval/agent_demo.jsonl`，包含教育、金融、医疗、通信各 5 条。其接口结构统一使用 `output.target_state`。运行前建议先查看 [2026-09-03 基准结果](agent_demo_benchmark_2026-09-03.md) 中列出的 Oracle 基线问题。
+
 ## 4. Mock 环境
 
 每次 trial 都创建独立的 `MockEnvironment`：
